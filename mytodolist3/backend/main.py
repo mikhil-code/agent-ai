@@ -15,31 +15,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Task(BaseModel):
-    id: str
+class TaskBase(BaseModel):
     text: str
-    completed: bool
 
-class TaskCreate(BaseModel):
-    text: str
+class TaskCreate(TaskBase):
+    pass
 
 class TaskUpdate(BaseModel):
     completed: bool
 
+class Task(TaskBase):
+    id: str
+    completed: bool
+
+    class Config:
+        from_attributes = True
+
 # In-memory storage
 tasks: List[Task] = []
 
-@app.get("/tasks")
+@app.get("/tasks", response_model=List[Task])
 async def get_tasks():
     return tasks
 
-@app.post("/task")
+@app.post("/task", response_model=Task)
 async def create_task(task: TaskCreate):
     new_task = Task(id=str(uuid.uuid4()), text=task.text, completed=False)
     tasks.append(new_task)
     return new_task
 
-@app.put("/task/{task_id}")
+@app.put("/task/{task_id}", response_model=Task)
 async def update_task(task_id: str, task_update: TaskUpdate):
     for task in tasks:
         if task.id == task_id:
