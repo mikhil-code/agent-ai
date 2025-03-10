@@ -1,0 +1,11 @@
+youtube_api:
+  max_results: 100
+  max_comments: 10000
+
+openai:
+  model: "gpt-3.5-turbo"
+  batch_size: 20
+  max_retries: 3
+
+cache:
+  expire_after: 86400  # 24 hours in seconds
