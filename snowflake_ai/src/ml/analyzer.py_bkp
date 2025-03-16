@@ -1,0 +1,102 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression  # Fixed import
+from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestRegressor
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+
+class MLAnalyzer:
+    def __init__(self):
+        self.model = None
+        self.scaler = StandardScaler()
+        
+    def suggest_algorithms(self, df: pd.DataFrame) -> dict:
+        suggestions = {}
+        
+        # Check for time series patterns
+        if self._has_time_series(df):
+            suggestions['Time Series'] = {
+                'algorithm': 'Linear Regression',
+                'description': 'Suitable for predicting trends over time',
+                'columns': self._get_numeric_columns(df)
+            }
+            
+        # Check for clustering potential
+        if self._has_clustering_potential(df):
+            suggestions['Clustering'] = {
+                'algorithm': 'K-Means',
+                'description': 'Good for finding patterns and grouping similar data points',
+                'columns': self._get_numeric_columns(df)
+            }
+            
+        # Check for complex patterns
+        if len(self._get_numeric_columns(df)) > 2:
+            suggestions['Complex Patterns'] = {
+                'algorithm': 'Random Forest',
+                'description': 'Suitable for complex relationships and multiple features',
+                'columns': self._get_numeric_columns(df)
+            }
+            
+        return suggestions
+
+    def train_model(self, df: pd.DataFrame, algorithm: str, target_col: str, feature_cols: list):
+        X = df[feature_cols]
+        y = df[target_col] if target_col else None
+        
+        # Scale features
+        st.write("algorithm: ", algorithm)
+        X_scaled = self.scaler.fit_transform(X)
+        
+        if algorithm == 'Linear Regression':
+            self.model = LinearRegression()
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+            self.model.fit(X_train, y_train)
+            return self.model.score(X_test, y_test)
+            
+        elif algorithm == 'K-Means':
+            self.model = KMeans(n_clusters=3)
+            self.model.fit(X_scaled)
+            return self.model.labels_
+            
+        elif algorithm == 'Random Forest':
+            self.model = RandomForestRegressor()
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+            self.model.fit(X_train, y_train)
+            return self.model.score(X_test, y_test)
+
+    def plot_results(self, df: pd.DataFrame, algorithm: str, target_col: str, feature_cols: list):
+        if algorithm == 'Linear Regression':
+            fig = px.scatter(df, x=feature_cols[0], y=target_col, 
+                           trendline="ols", title='Linear Regression Analysis')
+            return fig
+            
+        elif algorithm == 'K-Means':
+            clusters = self.model.labels_
+            df_plot = df.copy()
+            df_plot['Cluster'] = clusters
+            fig = px.scatter(df_plot, x=feature_cols[0], y=feature_cols[1],
+                           color='Cluster', title='K-Means Clustering')
+            return fig
+            
+        elif algorithm == 'Random Forest':
+            importance = pd.DataFrame({
+                'feature': feature_cols,
+                'importance': self.model.feature_importances_
+            }).sort_values('importance', ascending=False)
+            
+            fig = px.bar(importance, x='feature', y='importance',
+                        title='Feature Importance (Random Forest)')
+            return fig
+
+    def _get_numeric_columns(self, df: pd.DataFrame) -> list:
+        return df.select_dtypes(include=[np.number]).columns.tolist()
+
+    def _has_time_series(self, df: pd.DataFrame) -> bool:
+        return any(col.lower().contains('date') for col in df.columns)
+
+    def _has_clustering_potential(self, df: pd.DataFrame) -> bool:
+        return len(self._get_numeric_columns(df)) >= 2

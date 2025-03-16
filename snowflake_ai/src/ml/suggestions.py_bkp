@@ -1,0 +1,56 @@
+import pandas as pd
+from typing import Dict, List
+
+class MLSuggestionEngine:
+    def analyze_data(self, df: pd.DataFrame) -> Dict:
+        suggestions = {}
+        
+        # Time Series Analysis
+        if self._has_temporal_data(df):
+            suggestions['Time Series'] = {
+                'algorithms': ['Prophet', 'ARIMA', 'LSTM'],
+                'reason': 'Data contains temporal patterns suitable for forecasting',
+                'suggested_columns': self._get_numeric_time_columns(df)
+            }
+        
+        # Classification/Regression
+        if self._has_predictive_potential(df):
+            suggestions['Predictive'] = {
+                'algorithms': ['Random Forest', 'XGBoost', 'Linear Regression'],
+                'reason': 'Multiple numeric features available for prediction',
+                'suggested_columns': self._get_numeric_columns(df)
+            }
+        
+        # Clustering
+        if self._suitable_for_clustering(df):
+            suggestions['Clustering'] = {
+                'algorithms': ['K-Means', 'DBSCAN', 'Hierarchical Clustering'],
+                'reason': 'Data shows potential groups/patterns',
+                'suggested_columns': self._get_numeric_columns(df)
+            }
+        
+        return suggestions
+
+    def _has_temporal_data(self, df: pd.DataFrame) -> bool:
+        return any(df[col].dtype.name in ['datetime64[ns]', 'date'] 
+                  for col in df.columns)
+
+    def _has_predictive_potential(self, df: pd.DataFrame) -> bool:
+        numeric_cols = self._get_numeric_columns(df)
+        return len(numeric_cols) >= 2
+
+    def _suitable_for_clustering(self, df: pd.DataFrame) -> bool:
+        numeric_cols = self._get_numeric_columns(df)
+        return len(numeric_cols) >= 2 and len(df) >= 100
+
+    def _get_numeric_columns(self, df: pd.DataFrame) -> List[str]:
+        return df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+
+    def _get_numeric_time_columns(self, df: pd.DataFrame) -> Dict:
+        time_cols = [col for col in df.columns 
+                    if df[col].dtype.name in ['datetime64[ns]', 'date']]
+        numeric_cols = self._get_numeric_columns(df)
+        return {
+            'time_columns': time_cols,
+            'value_columns': numeric_cols
+        }
