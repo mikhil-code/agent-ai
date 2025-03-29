@@ -5,7 +5,7 @@ import pandas as pd
 from dotenv import load_dotenv
 import sqlparse
 import traceback
-
+import streamlit.components.v1 as components
 from ml.analyzer import MLAnalyzer
 from ml.suggestions import MLSuggestionEngine
 
