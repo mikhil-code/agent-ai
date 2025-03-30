@@ -100,12 +100,17 @@ def show_sql_generator():
         if st.button("Generate Query") and prompt:
             result=None
             countr=0
+            st.session_state.generated_sql = None
+            st.session_state.query_results = None
             try:
                 with st.spinner("Generating query..."):
                     while result is None:
                         countr+=1
                         if countr>10:
                             st.error("Failed to generate query")
+                            st.session_state.generated_sql = None
+                            st.session_state.query_results = None
+                            generated_sql = None
                             break
                         st.write(f"Attempt {countr}")
                         query_gen = QueryGenerator()
@@ -116,9 +121,16 @@ def show_sql_generator():
                         #st.write("Generated SQL limit: ", generated_sql_limit)
                         sqlparse.format(generated_sql_limit, reindent=True, keyword_case='upper')
                         try:
+                            print("Executing generated SQL")
                             result = snowflake_conn.execute_query(generated_sql_limit)
                             if not result.empty and result.shape[0]>0:
+                                print("adding querry to session state")
                                 st.session_state.generated_sql = generated_sql
+
+                            else:
+                               # result = None
+                                continue
+                                
                         except Exception as e:
                             continue
                         
@@ -142,6 +154,7 @@ def show_sql_generator():
             if execute_button:
                 try:
                     with st.spinner("Executing query..."):
+                        results = None
                         results = snowflake_conn.execute_query(st.session_state.generated_sql)
                         st.session_state.query_results = results
                         
@@ -173,6 +186,8 @@ def show_ml_analysis():
         st.warning("Please execute a query first to get data for ML analysis")
         return
     
+    st.subheader("Querry generated")
+    st.code(st.session_state.generated_sql, language='sql')
     df = st.session_state.query_results
     
     # Initialize analyzers
