@@ -19,7 +19,7 @@ class SnowflakeConnection:
         schema_info = {}
         try:
             # Get list of views/tables
-            self.cursor.execute("""
+            self.cursor.execute("""\
                 SELECT table_name, table_type 
                 FROM information_schema.tables 
                 WHERE table_schema = CURRENT_SCHEMA()

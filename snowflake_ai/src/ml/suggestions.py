@@ -1,17 +1,49 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 class MLSuggestionEngine:
+    def _clean_numeric_data(self, df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+        """Clean numeric data by filling nan with 0"""
+        df = df.copy()
+        for col in columns:
+            df[col] = df[col].fillna(0)
+        return df
+
+    def _validate_numeric_data(self, df: pd.DataFrame, columns: List[str]) -> Tuple[bool, List[str]]:
+        """Validate numeric columns for inf values only"""
+        problematic_cols = []
+        for col in columns:
+            if np.isinf(df[col]).any():
+                problematic_cols.append(col)
+        return len(problematic_cols) == 0, problematic_cols
+
     def analyze_data(self, df: pd.DataFrame) -> Dict:
         suggestions = {}
         
         # Get column information
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
+        date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()   
+
+        # Clean nan values
+        df = self._clean_numeric_data(df, numeric_cols)
+
+        # Validate for inf values
+        is_valid, problematic_cols = self._validate_numeric_data(df, numeric_cols)
+        if not is_valid:
+            suggestions['warnings'] = {
+                'message': 'Some columns contain infinite values',
+                'affected_columns': problematic_cols,
+                'recommendation': 'Consider handling infinite values before analysis'
+            }
+            # Filter out problematic columns
+            numeric_cols = [col for col in numeric_cols if col not in problematic_cols]
+
         date_cols.extend([col for col in df.columns if 'date' in col.lower()])
+        date_cols.extend([col for col in df.columns if 'month' in col.lower()])
+        date_cols.extend([col for col in df.columns if 'year' in col.lower()])
         
-        # Check for regression potential
+        # Only suggest analysis if we have valid columns
         if len(numeric_cols) >= 2:
             suggestions['Regression'] = {
                 'algorithms': ['Linear Regression', 'Random Forest'],
@@ -21,8 +53,6 @@ class MLSuggestionEngine:
                 'example_features': numeric_cols[1:min(4, len(numeric_cols))]
             }
         
-        # Check for clustering potential
-        if len(numeric_cols) >= 2:
             suggestions['Clustering'] = {
                 'algorithms': ['K-Means'],
                 'reason': 'Multiple numeric features available for pattern discovery',
@@ -30,7 +60,6 @@ class MLSuggestionEngine:
                 'example_features': numeric_cols[:2]
             }
         
-        # Check for time series potential
         if date_cols and numeric_cols:
             suggestions['Time Series'] = {
                 'algorithms': ['Prophet', 'ARIMA', 'LSTM'],
@@ -43,19 +72,12 @@ class MLSuggestionEngine:
 
         return suggestions
 
-    def get_example_usage(self, df: pd.DataFrame, suggestion_type: str) -> str:
-        """Returns example usage text for the suggested analysis"""
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        
-        examples = {
-            'Regression': f"Try predicting {numeric_cols[0]} using {', '.join(numeric_cols[1:3])}",
-            'Clustering': f"Find patterns by clustering based on {' and '.join(numeric_cols[:2])}",
-            'Time Series': "Analyze trends and make predictions over time"
-        }
-        
-        return examples.get(suggestion_type, "Select columns and algorithm to begin analysis")
-
     def validate_columns(self, df: pd.DataFrame) -> bool:
         """Validate if dataframe has sufficient columns for analysis"""
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        return len(numeric_cols) >= 2 and len(df) >= 10
+        if len(numeric_cols) < 2 or len(df) < 10:
+            return False
+            
+        # Check for inf/nan values
+        is_valid, _ = self._validate_numeric_data(df, numeric_cols)
+        return is_valid and len(numeric_cols) >= 2 and len(df) >= 10
