@@ -128,7 +128,7 @@ def render_sql_suggestions_page():
                                     "Download Results",
                                     csv,
                                     f"query_results_{idx+1}.csv",
-                              ;      "text/csv"
+                                    "text/csv"
                                 )
                     except Exception as e:
                         st.error(f"Query execution failed: {str(e)}")

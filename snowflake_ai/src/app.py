@@ -1,3 +1,4 @@
+from pages.sql_suggestions import render_sql_suggestions_page
 import streamlit as st
 from core.snowflake import SnowflakeConnection
 from core.openai_client import QueryGenerator   
