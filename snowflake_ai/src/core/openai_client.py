@@ -38,7 +38,7 @@ class QueryGenerator:
         sql = sql.strip().rstrip(';')
         sql =sql.replace('```sql', '').replace('```', '').strip()
         if 'LIMIT' not in sql.upper():
-            return f"{sql} LIMIT 1"
+            return f"{sql} LIMIT 2"
         return sql
     
 

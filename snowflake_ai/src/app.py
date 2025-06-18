@@ -1,3 +1,4 @@
+from pages.sql_suggestions import render_sql_suggestions_page
 import streamlit as st
 from core.snowflake import SnowflakeConnection
 from core.openai_client import QueryGenerator   
@@ -34,12 +35,16 @@ def is_valid_sql(query: str) -> bool:
 def main():
     init_session_state()
     st.sidebar.title("Navigation")
-    page = st.sidebar.selectbox("Choose a page", ["SQL Generator", "ML Analysis"])
+    page = st.sidebar.selectbox("Choose a page", ["SQL Generator", "ML Analysis", "AI Analysis Suggestions", "SQL Suggestions"])
 
     if page == "SQL Generator":
         show_sql_generator()
-    else:
+    elif page == "ML Analysis":
         show_ml_analysis()
+    elif page == "SQL Suggestions":
+        render_sql_suggestions_page()
+    else:
+        show_ai_suggestions()
 
     # Add ML suggestions after query execution
     if st.session_state.get('query_results') is not None:
@@ -101,12 +106,17 @@ def show_sql_generator():
         if st.button("Generate Query") and prompt:
             result=None
             countr=0
+            st.session_state.generated_sql = None
+            st.session_state.query_results = None
             try:
                 with st.spinner("Generating query..."):
                     while result is None:
                         countr+=1
                         if countr>10:
                             st.error("Failed to generate query")
+                            st.session_state.generated_sql = None
+                            st.session_state.query_results = None
+                            generated_sql = None
                             break
                         st.write(f"Attempt {countr}")
                         query_gen = QueryGenerator()
@@ -117,9 +127,16 @@ def show_sql_generator():
                         #st.write("Generated SQL limit: ", generated_sql_limit)
                         sqlparse.format(generated_sql_limit, reindent=True, keyword_case='upper')
                         try:
+                            print("Executing generated SQL")
                             result = snowflake_conn.execute_query(generated_sql_limit)
                             if not result.empty and result.shape[0]>0:
+                                print("adding querry to session state")
                                 st.session_state.generated_sql = generated_sql
+
+                            else:
+                               # result = None
+                                continue
+                                
                         except Exception as e:
                             continue
                         
@@ -143,6 +160,7 @@ def show_sql_generator():
             if execute_button:
                 try:
                     with st.spinner("Executing query..."):
+                        results = None
                         results = snowflake_conn.execute_query(st.session_state.generated_sql)
                         st.session_state.query_results = results
                         
@@ -184,6 +202,8 @@ def show_ml_analysis():
     
     if ml_suggestions:
         st.subheader("Available Analysis Options")
+        st.subheader("Generated SQL")
+        st.code(st.session_state.generated_sql, language='sql')
         analysis_type = st.selectbox(
             "Select Analysis Type",
             options=list(ml_suggestions.keys())
@@ -238,6 +258,101 @@ def show_ml_analysis():
                     except Exception as e:
                         st.error(f"Analysis failed: {str(e)}")
                         st.error(traceback.format_exc())
+
+def show_ai_suggestions():
+    st.title("AI Analysis Suggestions")
+    
+    try:
+        snowflake_conn = SnowflakeConnection()
+        
+        # Get schema info if not cached
+        if not st.session_state.get('schema_info'):
+            with st.spinner("Loading schema information..."):
+                st.session_state.schema_info = snowflake_conn.get_schema_info()
+        
+        suggestion_engine = MLSuggestionEngine()
+        
+        for table_idx, (table_name, details) in enumerate(st.session_state.schema_info.items()):
+            with st.expander(f"Analysis Suggestions for {table_name}", expanded=True):
+                # Create sample dataframe from schema info
+                df = pd.DataFrame(details['sample_data'])
+                if not df.empty:
+                    suggestions = suggestion_engine.analyze_data(df)
+                    
+                    if suggestions:
+                        for analysis_idx, (analysis_type, analysis_details) in enumerate(suggestions.items()):
+                            if analysis_type != 'warnings':
+                                st.subheader(analysis_type)
+                                st.write(f"**Why?** {analysis_details['reason']}")
+                                st.write("**Suggested Algorithms:**")
+                                for algo in analysis_details['algorithms']:
+                                    st.write(f"- {algo}")
+                                
+                                # Generate and show sample query
+                                if isinstance(analysis_details['suggested_columns'], dict):
+                                    time_cols = analysis_details['suggested_columns']['time_columns']
+                                    value_cols = analysis_details['suggested_columns']['value_columns']
+                                    sample_query = f"""
+                                        SELECT 
+                                            {', '.join(time_cols)},
+                                            {', '.join(value_cols)}
+                                        FROM {table_name}
+                                        ORDER BY {time_cols[0]}
+                                        LIMIT 1000
+                                    """
+                                else:
+                                    cols = analysis_details['suggested_columns']
+                                    sample_query = f"""
+                                        SELECT {', '.join(cols)}
+                                        FROM {table_name}
+                                        LIMIT 1000
+                                    """
+                                
+                                st.write("**Suggested Query:**")
+                                st.code(sample_query.strip(), language='sql')
+                                
+                                # Add unique key to button based on table and analysis type
+                                button_key = f"execute_btn_{table_idx}_{analysis_idx}_{table_name}_{analysis_type}"
+                                if st.button(f"Execute {analysis_type} Query", key=button_key):
+                                    try:
+                                        results = snowflake_conn.execute_query(sample_query)
+                                        st.write("Query Results:")
+                                        st.dataframe(results)
+                                        
+                                        # Cache results for ML analysis
+                                        st.session_state.query_results = results
+                                        st.session_state.generated_sql = sample_query
+                                        
+                                        # Add download button with unique key
+                                        if not results.empty:
+                                            csv = results.to_csv(index=False).encode('utf-8')
+                                            st.download_button(
+                                                "Download Results",
+                                                csv,
+                                                f"{table_name}_{analysis_type.lower()}_results.csv",
+                                                "text/csv",
+                                                key=f"download_btn_{table_idx}_{analysis_idx}_{table_name}_{analysis_type}"
+                                            )
+                                    except Exception as e:
+                                        st.error(f"Query execution failed: {str(e)}")
+                                
+                                st.write("**Relevant Columns:**")
+                                if isinstance(analysis_details['suggested_columns'], dict):
+                                    st.write("Time Columns:", ", ".join(analysis_details['suggested_columns']['time_columns']))
+                                    st.write("Value Columns:", ", ".join(analysis_details['suggested_columns']['value_columns']))
+                                else:
+                                    st.write(", ".join(analysis_details['suggested_columns']))
+                    else:
+                        continue
+                        #st.info("No analysis suggestions available for this table")
+                else:
+                    st.warning("No sample data available for analysis")
+                    
+    except Exception as e:
+        st.error(f"Error generating suggestions: {str(e)}")
+    finally:
+        if 'snowflake_conn' in locals():
+            snowflake_conn.close()
 
 if __name__ == "__main__":
     main()
