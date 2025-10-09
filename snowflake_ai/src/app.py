@@ -122,7 +122,7 @@ def show_sql_generator():
                         query_gen = QueryGenerator()
                         generated_sql = query_gen.generate_sql(prompt, st.session_state.schema_info)
                         generated_sql=generated_sql.replace('```sql', '').replace('```', '').strip()
-                        #st.write("Generated SQL: ", generated_sql)
+                        st.write("Generated SQL: ", generated_sql)
                         generated_sql_limit = query_gen._add_limit_clause(generated_sql)
                         #st.write("Generated SQL limit: ", generated_sql_limit)
                         sqlparse.format(generated_sql_limit, reindent=True, keyword_case='upper')
@@ -130,22 +130,22 @@ def show_sql_generator():
                             print("Executing generated SQL")
                             result = snowflake_conn.execute_query(generated_sql_limit)
                             if not result.empty and result.shape[0]>0:
-                                print("adding querry to session state")
+                                print("adding query to session state")
                                 st.session_state.generated_sql = generated_sql
-
+                                st.session_state.query_results = None  # Reset previous results
                             else:
-                               # result = None
+                                result = None
                                 continue
                                 
                         except Exception as e:
                             continue
                         
-                    #generated_sql = sqlparse.format(generated_sql, reindent=True, keyword_case='upper').strip()
-                    
-                    
-                # Show generated SQL
-                st.subheader("Generated SQL")
-                st.code(generated_sql, language='sql')
+                #if st.session_state.generated_sql:
+                    # Show generated SQL
+                #    st.subheader("Generated SQL")
+                #    st.code(st.session_state.generated_sql, language='sql')
+                #else:
+                #    st.error("Could not generate a valid SQL query. Please try rephrasing your request.")
                 
             except Exception as e:
                 st.error(f"Failed to generate query: {str(e)}")
